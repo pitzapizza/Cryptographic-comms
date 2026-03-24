@@ -1,18 +1,25 @@
 import socket
 import threading
-from crypto_core import chm_encrypt, chm_decrypt, mandelbrot_key
+from crypto_core import chm_encrypt, chm_decrypt, mandelbrot_key, secure_wipe
 
 HOST = '127.0.0.1'
 PORT = 5000
 
-# Shared seed (OOB verification required in real system)
-SHARED_SEED = "secure-seed-123"
+# ---------- Secure Seed Handling ----------
+def get_shared_seed():
+    # Avoid storing as plain string
+    seed_input = input("Enter shared seed (OOB verified): ").encode()
+    return bytearray(seed_input)
 
-# Generate same key on both sides
-KEY = mandelbrot_key(SHARED_SEED)
+# Generate key securely
+SEED = get_shared_seed()
+KEY = bytearray(mandelbrot_key(SEED))
+
+secure_wipe(SEED)  # 🔥 destroy seed immediately
 
 # ---------- Receive Messages ----------
 def receive_messages(sock):
+    global KEY
     while True:
         try:
             data = sock.recv(4096)
@@ -30,9 +37,12 @@ def receive_messages(sock):
 
 # ---------- Send Messages ----------
 def send_messages(sock):
+    global KEY
     while True:
         msg = input()
+
         if msg.lower() == "exit":
+            secure_wipe(KEY)  # 🔥 wipe key before exit
             sock.close()
             break
 
@@ -55,8 +65,7 @@ def start_server():
 # ---------- Client ----------
 def start_client():
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    #client.connect((HOST, PORT))
-    client.connect(('127.0.0.1', 6000))  # connect to proxy instead of server
+    client.connect(('127.0.0.1', 6000))  # proxy / MITM demo
     print("[+] Connected to server")
 
     threading.Thread(target=receive_messages, args=(client,), daemon=True).start()
